@@ -19,21 +19,22 @@ RSpec.configure do |c|
 
   #default option values
   defaults = {
-    :nodeset     => 'default',
+      :nodeset     => 'default',
   }
   #read env vars
   env_vars = {
-    :color       => ENV['BEAKER_color'] || ENV['RS_COLOR'],
-    :nodeset     => ENV['BEAKER_set'] || ENV['RS_SET'],
-    :nodesetfile => ENV['BEAKER_setfile'] || ENV['RS_SETFILE'],
-    :provision   => ENV['BEAKER_provision'] || ENV['RS_PROVISION'],
-    :keyfile     => ENV['BEAKER_keyfile'] || ENV['RS_KEYFILE'],
-    :debug       => ENV['BEAKER_debug'] || ENV['RS_DEBUG'],
-    :destroy     => ENV['BEAKER_destroy'] || ENV['RS_DESTROY'],
-    :optionsfile => ENV['BEAKER_options_file'] || ENV['RS_OPTIONS_FILE'],
-   }.delete_if {|key, value| value.nil?}
-   #combine defaults and env_vars to determine overall options
-   options = defaults.merge(env_vars)
+      :color       => ENV['BEAKER_color'] || ENV['RS_COLOR'],
+      :nodeset     => ENV['BEAKER_set'] || ENV['RS_SET'],
+      :nodesetfile => ENV['BEAKER_setfile'] || ENV['RS_SETFILE'],
+      :provision   => ENV['BEAKER_provision'] || ENV['RS_PROVISION'],
+      :keyfile     => ENV['BEAKER_keyfile'] || ENV['RS_KEYFILE'],
+      :debug       => ENV['BEAKER_debug'] || ENV['RS_DEBUG'],
+      :destroy     => ENV['BEAKER_destroy'] || ENV['RS_DESTROY'],
+      :optionsfile => ENV['BEAKER_options_file'] || ENV['RS_OPTIONS_FILE'],
+      :test_tiers  => ENV['BEAKER_test_tiers'] || ENV['RS_TEST_TIERS'],
+  }.delete_if {|key, value| value.nil?}
+  #combine defaults and env_vars to determine overall options
+  options = defaults.merge(env_vars)
 
   # process options to construct beaker command string
   nodesetfile = options[:nodesetfile] || File.join('spec/acceptance/nodesets',"#{options[:nodeset]}.yml")
@@ -42,9 +43,21 @@ RSpec.configure do |c|
   debug = options[:debug] ? ['--log-level', 'debug'] : nil
   color = options[:color] == 'no' ? ['--no-color'] : nil
   options_file = options[:optionsfile] ? ['--options-file',options[:optionsfile]] : nil
+  test_tiers = options[:test_tiers] ? ['--tag', ''] : nil
+  if(options[:test_tiers])
+    test_tiers_array = options[:test_tiers].split(',')
+    test_tiers_array.each do |tier|
+      raise "#{tier} not a valid test tier." unless %w(low medium high).include?(tier)
+      test_tiers[1] += "tier_#{tier},"
+    end
+  else
+    puts 'BEAKER_test_tiers env variable not defined. Defaulting to run all tests.'
+  end
+  test_tiers[1] = test_tiers[1].chomp(',') if (test_tiers)
+
 
   # Configure all nodes in nodeset
-  c.setup([fresh_nodes, '--hosts', nodesetfile, keyfile, debug, color, options_file].flatten.compact)
+  c.setup([fresh_nodes, '--hosts', nodesetfile, keyfile, debug, color, options_file, test_tiers].flatten.compact)
   c.provision
   c.validate
   c.configure
@@ -57,12 +70,12 @@ RSpec.configure do |c|
   # Destroy nodes if no preserve hosts
   c.after :suite do
     case options[:destroy]
-    when 'no'
-      # Don't cleanup
-    when 'onpass'
-      c.cleanup if RSpec.world.filtered_examples.values.flatten.none?(&:exception)
-    else
-      c.cleanup
+      when 'no'
+        # Don't cleanup
+      when 'onpass'
+        c.cleanup if RSpec.world.filtered_examples.values.flatten.none?(&:exception)
+      else
+        c.cleanup
     end
   end
 end
